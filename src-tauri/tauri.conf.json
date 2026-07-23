@@ -30,10 +30,6 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["zip"],
-    "icon": ["icons/icon.png", "icons/icon.ico"],
-    "windows": {
-      "webviewInstallMode": "embedBootstrapper"
-    }
+    "icon": ["icons/icon.png", "icons/icon.ico"]
   }
 }

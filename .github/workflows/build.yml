@@ -49,8 +49,17 @@ jobs:
         with:
           args: --target x86_64-pc-windows-msvc
 
+      - name: Build zip for portable release
+        run: |
+          $src = "src-tauri/target/x86_64-pc-windows-msvc/release/dakal.exe"
+          $dest = "dakal-portable"
+          mkdir $dest -Force
+          Copy-Item $src "$dest/dakal.exe"
+          Copy-Item "sing-box.exe" "$dest/" -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$dest/*" -DestinationPath "dakal-v0.1.0.zip"
+
       - uses: actions/upload-artifact@v4
         with:
           name: dakal-windows
-          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/zip/*.zip
+          path: dakal-v0.1.0.zip
           retention-days: 30
