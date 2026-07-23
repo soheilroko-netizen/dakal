@@ -1,17 +1,24 @@
 {
   "identifier": "default",
-  "description": "enables the default permissions",
+  "description": "Dakal VPN permissions",
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:event:default",
+    "core:window:default",
+    "core:window:allow-close",
+    "core:window:allow-minimize",
     "core:window:allow-show",
     "core:window:allow-hide",
-    "core:window:allow-close",
-    "core:window:allow-set-focus",
-    "core:window:allow-start-dragging",
-    "tray:default",
-    "shell:allow-open",
-    "process:default",
-    "process:allow-exit"
+    "core:window:allow-set-size",
+    "core:window:allow-center",
+    "core:tray:default",
+    "store:default",
+    "opener:default",
+    "dialog:default",
+    "notification:default",
+    "os:default",
+    "shell:default",
+    "fs:default"
   ]
 }

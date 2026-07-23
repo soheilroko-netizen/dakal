@@ -1,142 +1,141 @@
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::PathBuf;
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct DakalConfig {
-    pub log: Option<LogConfig>,
-    pub dns: Option<DnsConfig>,
-    pub inbounds: Vec<Inbound>,
-    pub outbounds: Vec<Outbound>,
-    pub route: Option<RouteConfig>,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct LogConfig {
-    pub level: String,
-    pub timestamp: bool,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct DnsConfig {
-    pub servers: Vec<DnsServer>,
-    pub final: String,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct DnsServer {
-    pub tag: String,
-    pub r#type: String,
-    pub server: String,
-    pub detour: Option<String>,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct Inbound {
-    pub r#type: String,
-    pub tag: String,
-    pub address: Vec<String>,
-    pub auto_route: Option<bool>,
-    pub strict_route: Option<bool>,
-    pub stack: Option<String>,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct Outbound {
-    pub r#type: String,
-    pub tag: String,
-    pub server: String,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AppConfig {
+    /// Path to user's config.json. If None, generates from defaults
+    pub config_path: Option<String>,
+    /// Server IP for ping test
+    pub server_ip: String,
+    /// Server port for ping test (TCP)
     pub server_port: u16,
-    pub method: Option<String>,
-    pub password: Option<String>,
-    pub detour: Option<String>,
-    pub version: Option<u8>,
-    pub tls: Option<TlsConfig>,
-    pub udp_over_tcp: Option<UdpOverTcp>,
+    /// Embedded config (your working config)
+    pub ss_server: String,
+    pub ss_port: u16,
+    pub ss_method: String,
+    pub ss_password: String,
+    pub stls_server: String,
+    pub stls_port: u16,
+    pub stls_password: String,
+    pub stls_sni: String,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct TlsConfig {
-    pub enabled: bool,
-    pub server_name: Option<String>,
-    pub insecure: Option<bool>,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct UdpOverTcp {
-    pub enabled: bool,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct RouteConfig {
-    pub rules: Vec<RouteRule>,
-    pub final: String,
-    pub auto_detect_interface: Option<bool>,
-    pub default_domain_resolver: Option<String>,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct RouteRule {
-    pub action: Option<String>,
-    pub protocol: Option<String>,
-    pub ip_cidr: Option<Vec<String>>,
-    pub outbound: Option<String>,
-}
-
-fn config_dir() -> PathBuf {
-    let base = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| PathBuf::from("."));
-    base.join("profiles")
-}
-
-pub fn list_profiles() -> Vec<String> {
-    let dir = config_dir();
-    if !dir.exists() {
-        return vec!["default".into()];
-    }
-    let mut names: Vec<String> = fs::read_dir(&dir)
-        .ok()
-        .into_iter()
-        .flatten()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map(|ext| ext == "json").unwrap_or(false))
-        .filter_map(|e| e.path().file_stem().map(|s| s.to_string_lossy().into_owned()))
-        .collect();
-    names.sort();
-    if !names.contains(&"default".into()) {
-        names.insert(0, "default".into());
-    }
-    names
-}
-
-pub fn profile_path(name: &str) -> String {
-    let dir = config_dir();
-    if name == "default" {
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.join("config.json")))
-            .unwrap_or_else(|| PathBuf::from("config.json"))
-            .to_string_lossy()
-            .into_owned()
-    } else {
-        config_dir()
-            .join(format!("{}.json", name))
-            .to_string_lossy()
-            .into_owned()
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            config_path: None,
+            server_ip: "187.127.83.147".into(),
+            server_port: 8380,
+            ss_server: "187.127.83.147".into(),
+            ss_port: 8380,
+            ss_method: "2022-blake3-chacha20-poly1305".into(),
+            ss_password: "tE+3/qlN/orCZRVUutWouysZ8BQs4RWzq46WK6CDGG4=".into(),
+            stls_server: "187.127.83.147".into(),
+            stls_port: 8553,
+            stls_password: "y2lachetore".into(),
+            stls_sni: "dl.google.com".into(),
+        }
     }
 }
 
-pub fn load(path: &str) -> Result<DakalConfig, String> {
-    let text = fs::read_to_string(path).map_err(|e| format!("can't read {}: {}", path, e))?;
-    serde_json::from_str(&text).map_err(|e| format!("invalid JSON: {}", e))
-}
+impl AppConfig {
+    pub fn load_or_default() -> Self {
+        // Try loading from disk next to exe
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                let path = dir.join("configs").join("profile.json");
+                if path.exists() {
+                    if let Ok(content) = std::fs::read_to_string(&path) {
+                        if let Ok(cfg) = serde_json::from_str::<AppConfig>(&content) {
+                            return cfg;
+                        }
+                    }
+                }
+            }
+        }
+        Self::default()
+    }
 
-pub fn save(name: &str, content: &str) -> Result<String, String> {
-    let dir = config_dir();
-    fs::create_dir_all(&dir).map_err(|e| format!("can't create profiles dir: {}", e))?;
-    let path = dir.join(format!("{}.json", name));
-    fs::write(&path, content).map_err(|e| format!("can't write: {}", e))?;
-    Ok(path.to_string_lossy().into_owned())
+    pub fn get_ping_target(&self) -> Option<String> {
+        Some(format!("{}:{}", self.server_ip, self.server_port))
+    }
+
+    /// Generate sing-box config JSON string from embedded params
+    pub fn generate_config(&self) -> String {
+        serde_json::to_string_pretty(&serde_json::json!({
+            "log": {
+                "level": "info",
+                "timestamp": true
+            },
+            "dns": {
+                "servers": [
+                    {
+                        "tag": "remote-doh",
+                        "type": "https",
+                        "server": "1.1.1.1",
+                        "detour": "ss-out"
+                    },
+                    {
+                        "tag": "google-doh",
+                        "type": "https",
+                        "server": "8.8.8.8",
+                        "detour": "ss-out"
+                    }
+                ],
+                "final": "remote-doh"
+            },
+            "inbounds": [
+                {
+                    "type": "tun",
+                    "tag": "tun-in",
+                    "address": ["172.19.0.1/30"],
+                    "auto_route": true,
+                    "strict_route": true,
+                    "stack": "system"
+                }
+            ],
+            "outbounds": [
+                {
+                    "type": "shadowsocks",
+                    "tag": "ss-out",
+                    "server": self.ss_server,
+                    "server_port": self.ss_port,
+                    "method": self.ss_method,
+                    "password": self.ss_password,
+                    "detour": "shadowtls-out",
+                    "udp_over_tcp": { "enabled": true }
+                },
+                {
+                    "type": "shadowtls",
+                    "tag": "shadowtls-out",
+                    "server": self.stls_server,
+                    "server_port": self.stls_port,
+                    "password": self.stls_password,
+                    "version": 3,
+                    "tls": {
+                        "enabled": true,
+                        "server_name": self.stls_sni,
+                        "insecure": false
+                    }
+                },
+                {
+                    "type": "direct",
+                    "tag": "direct"
+                }
+            ],
+            "route": {
+                "rules": [
+                    { "action": "sniff" },
+                    { "protocol": "dns", "action": "hijack-dns" },
+                    {
+                        "ip_cidr": ["187.127.83.147/32"],
+                        "outbound": "direct"
+                    }
+                ],
+                "final": "ss-out",
+                "auto_detect_interface": true,
+                "default_domain_resolver": "remote-doh"
+            }
+        }))
+        .unwrap_or_default()
+    }
 }
