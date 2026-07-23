@@ -140,11 +140,14 @@ fn main() {
                 .build(_app)?;
 
             // Close → hide to tray
+            let app_handle = _app.handle().clone();
             if let Some(window) = _app.get_webview_window("main") {
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
-                        let _ = window.hide();
+                        if let Some(w) = app_handle.get_webview_window("main") {
+                            let _ = w.hide();
+                        }
                     }
                 });
             }
