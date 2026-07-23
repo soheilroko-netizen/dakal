@@ -36,9 +36,9 @@ jobs:
         with:
           node-version: '22'
           architecture: x64
-          cache: 'pnpm'
 
       - run: corepack enable && corepack prepare pnpm@9 --activate
+      - run: pnpm store path
 
       - run: pnpm install
       - run: pnpm run build
