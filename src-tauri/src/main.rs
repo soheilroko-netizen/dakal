@@ -43,7 +43,7 @@ async fn stop_vpn(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(
 
 #[tauri::command]
 async fn get_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    let proc = state.proc.lock().await;
+    let mut proc = state.proc.lock().await;
     let running = proc.is_running();
     let ping = if running {
         let now = std::time::Instant::now();

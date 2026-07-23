@@ -11,7 +11,7 @@ impl SingBoxProcess {
         Self { child: None }
     }
 
-    pub fn is_running(&self) -> bool {
+    pub fn is_running(&mut self) -> bool {
         if let Some(ref mut child) = self.child {
             match child.try_wait() {
                 Ok(Some(_)) => {
