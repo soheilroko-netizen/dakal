@@ -1,4 +1,6 @@
 use std::process::{Child, Command, Stdio};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 
 pub struct SingBoxProcess {
     child: Option<Child>,
