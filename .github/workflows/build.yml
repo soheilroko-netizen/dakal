@@ -43,6 +43,14 @@ jobs:
       - run: pnpm install
       - run: pnpm run build
 
+      - name: Download sing-box
+        run: |
+          curl -Lo sing-box.zip "https://github.com/SagerNet/sing-box/releases/download/v1.13.14/sing-box-1.13.14-windows-amd64v3.zip"
+          7z x sing-box.zip -osing-box-tmp
+          Move-Item sing-box-tmp/sing-box-*/sing-box.exe sing-box.exe
+          Remove-Item sing-box.zip -Force
+          Remove-Item sing-box-tmp -Recurse -Force
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
