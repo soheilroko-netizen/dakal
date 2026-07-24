@@ -44,11 +44,12 @@ jobs:
       - run: pnpm run build
 
       - name: Download sing-box
+        shell: pwsh
         run: |
           echo "Downloading sing-box..."
-          curl.exe -Lo sing-box.zip "https://github.com/SagerNet/sing-box/releases/download/v1.13.14/sing-box-1.13.14-windows-amd64v3.zip"
-          echo "Downloaded. Size:"
-          ls -la sing-box.zip
+          curl.exe -L -o sing-box.zip "https://github.com/SagerNet/sing-box/releases/download/v1.13.14/sing-box-1.13.14-windows-amd64v3.zip"
+          echo "Downloaded."
+          dir sing-box.zip
           echo "Extracting..."
           7z x sing-box.zip "-osing-box-tmp" -y
           echo "Extracted files:"
