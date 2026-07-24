@@ -9,7 +9,7 @@ repository = "https://github.com/soheilroko-netizen/dakal"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
-winres = "0.1"
+embed-resource = "2"
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
