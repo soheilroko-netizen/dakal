@@ -1,13 +1,12 @@
 {
+  "identifier": "com.dakal.vpn",
+  "productName": "dakal",
+  "version": "0.1.0",
   "build": {
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
-    "devPath": "../dist",
-    "distDir": "../dist"
-  },
-  "package": {
-    "productName": "dakal",
-    "version": "0.1.0"
+    "devUrl": "http://localhost:3000",
+    "frontendDist": "../dist"
   },
   "tauri": {
     "allowlist": {
