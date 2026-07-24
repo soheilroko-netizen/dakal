@@ -1,68 +1,57 @@
-import './styles.css';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 
-const app = document.getElementById('app')!;
+let running = false;
 
-let state = {
-  connected: false,
-  statusText: 'Disconnected',
-  ping: 0,
-  uptime: '',
-  tx: 0,
-  rx: 0,
-  error: '',
-};
+const btn = document.getElementById('connect-btn')!;
+const statusText = document.getElementById('status-text')!;
+const statusDot = document.getElementById('status-dot')!;
+const pingValue = document.getElementById('ping-value')!;
 
-function render() {
-  app.innerHTML = `
-    <div class="container">
-      <div class="planet-btn ${state.connected ? 'connected' : ''}" id="connectBtn">
-        <svg class="power-icon" viewBox="0 0 64 64" fill="none">
-          <path d="M32 8v24" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
-          <path d="M20 18a20 20 0 1 0 24 0" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
-        </svg>
-        <div class="ring"></div>
-      </div>
-      <div class="status">${state.statusText}</div>
-      ${state.error ? `<div class="error">${state.error}</div>` : ''}
-      <div class="stats">
-        <div class="stat">Ping: ${state.ping}ms</div>
-        <div class="stat">${state.uptime}</div>
-      </div>
-    </div>
-  `;
-
-  document.getElementById('connectBtn')?.addEventListener('click', async () => {
-    try {
-      state.error = '';
-      if (state.connected) {
-        await invoke('stop_vpn');
-      } else {
-        await invoke('start_vpn');
-      }
-      // Request status update after action
-      const status = await invoke<any>('get_status');
-      state.connected = status.running;
-      state.statusText = status.running ? 'Connected' : 'Disconnected';
-      state.ping = status.ping || 0;
-      render();
-    } catch (e: any) {
-      state.error = typeof e === 'string' ? e : e?.message || 'Connection failed';
-      render();
-    }
-  });
+function setConnected() {
+  running = true;
+  btn.textContent = 'Disconnect';
+  btn.classList.add('connected');
+  statusText.textContent = 'Connected';
+  statusDot.className = 'dot green';
 }
 
-render();
+function setDisconnected() {
+  running = false;
+  btn.textContent = 'Connect';
+  btn.classList.remove('connected');
+  statusText.textContent = 'Disconnected';
+  statusDot.className = 'dot red';
+  pingValue.textContent = '-- ms';
+}
 
-// Listen for status updates
-listen<any>('vpn-status', (e) => {
-  const s = e.payload;
-  state.connected = s.running;
-  state.statusText = s.running ? 'Connected' : 'Disconnected';
-  if (s.ping !== undefined) state.ping = s.ping;
-  if (s.uptime !== undefined) state.uptime = s.uptime;
-  state.error = '';
-  render();
-});
+async function toggle() {
+  if (running) {
+    await invoke('disconnect');
+    setDisconnected();
+  } else {
+    btn.textContent = 'Connecting...';
+    try {
+      await invoke('connect');
+      setConnected();
+    } catch (e) {
+      statusText.textContent = `Error: ${e}`;
+      btn.textContent = 'Connect';
+    }
+  }
+}
+
+async function poll() {
+  try {
+    const status: any = await invoke('get_status');
+    if (status.running) {
+      if (!running) setConnected();
+      pingValue.textContent = status.ping > 0 ? `${status.ping} ms` : '-- ms';
+    } else {
+      if (running) setDisconnected();
+    }
+  } catch {}
+}
+
+btn.addEventListener('click', toggle);
+setInterval(poll, 2000);
+poll();

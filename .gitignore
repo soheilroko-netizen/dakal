@@ -1,8 +1,5 @@
 node_modules/
 dist/
 target/
-*.lock
-*.exe
-*.zip
+*.log
 .DS_Store
-src-tauri/target/

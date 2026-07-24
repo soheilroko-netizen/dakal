@@ -2,7 +2,7 @@
 name = "dakal"
 version = "0.1.0"
 edition = "2021"
-description = "Dakal VPN Client - sing-box wrapper with space UI"
+description = "Dakal VPN Client - sing-box wrapper"
 authors = ["soheilroko-netizen"]
 license = "MIT"
 repository = "https://github.com/soheilroko-netizen/dakal"
@@ -18,9 +18,8 @@ tauri-plugin-shell = "2"
 tauri-plugin-fs = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["process", "net", "time", "io-util"] }
 anyhow = "1"
-
 
 [profile.release]
 lto = true

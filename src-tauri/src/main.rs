@@ -1,66 +1,118 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod config;
-mod process;
-
+use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
+use std::time::Instant;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tauri::{Emitter, Manager, State};
 
-use config::AppConfig;
-use process::SingBoxProcess;
+// ── State ──────────────────────────────────────────────
 
 struct AppState {
-    proc: Arc<Mutex<SingBoxProcess>>,
-    config: Arc<Mutex<AppConfig>>,
+    child: Arc<Mutex<Option<Child>>>,
+    ping_target: String,
 }
 
-// ── Tauri Commands ──────────────────────────────────────
+fn exe_dir() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+fn extract_ping_target() -> String {
+    let path = exe_dir().join("config.json");
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(_) => return String::new(),
+    };
+    let json: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(j) => j,
+        Err(_) => return String::new(),
+    };
+    let outbounds = match json.get("outbounds")?.as_array() {
+        Some(a) => a,
+        None => return String::new(),
+    };
+    let first = outbounds.first()?;
+    let server = first.get("server")?.as_str()?;
+    let port = first.get("server_port")?.as_u64()?;
+    format!("{}:{}", server, port)
+}
+
+// ── Commands ───────────────────────────────────────────
 
 #[tauri::command]
-async fn start_vpn(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
-    let mut proc = state.proc.lock().await;
-    if proc.is_running() {
-        return Err("Already running".into());
+async fn connect(state: State<'_, AppState>) -> Result<(), String> {
+    let mut guard = state.child.lock().await;
+    if guard.is_some() {
+        return Err("Already connected".into());
     }
 
-    let cfg = state.config.lock().await.clone();
-    proc.start(&cfg).await.map_err(|e| e.to_string())?;
+    let dir = exe_dir();
+    let singbox = dir.join("sing-box.exe");
+    let config = dir.join("config.json");
 
-    // Emit connected status
-    let _ = app.emit("vpn-status", serde_json::json!({"running": true}));
+    if !singbox.exists() {
+        return Err("sing-box.exe not found in app folder".into());
+    }
+    if !config.exists() {
+        return Err("config.json not found in app folder".into());
+    }
+
+    let child = Command::new(&singbox)
+        .arg("run")
+        .arg("-c")
+        .arg(&config)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(0x08000000) // CREATE_NO_WINDOW
+        .spawn()
+        .map_err(|e| format!("Failed to start sing-box: {e}"))?;
+
+    *guard = Some(child);
     Ok(())
 }
 
 #[tauri::command]
-async fn stop_vpn(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
-    let mut proc = state.proc.lock().await;
-    proc.stop().await;
-    let _ = app.emit("vpn-status", serde_json::json!({"running": false}));
+async fn disconnect(state: State<'_, AppState>) -> Result<(), String> {
+    let mut guard = state.child.lock().await;
+    if let Some(mut child) = guard.take() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
     Ok(())
 }
 
 #[tauri::command]
 async fn get_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    let mut proc = state.proc.lock().await;
-    let running = proc.is_running();
-    let cfg = state.config.lock().await.clone();
-    let ping_target = cfg.ping_target.clone();
-    drop(cfg);
-    let ping = if running {
-        if let Some(addr) = ping_target {
-            let now = std::time::Instant::now();
-            let r = tokio::time::timeout(
-                std::time::Duration::from_secs(3),
-                tokio::net::TcpStream::connect(&addr),
-            )
-            .await;
-            match r {
-                Ok(Ok(_)) => now.elapsed().as_millis() as u64,
-                _ => 0,
-            }
-        } else {
-            0
+    let mut guard = state.child.lock().await;
+    let running = if let Some(ref mut child) = *guard {
+        match child.try_wait() {
+            Ok(Some(_)) => { *guard = None; false }
+            Ok(None) => true,
+            Err(_) => { *guard = None; false }
+        }
+    } else {
+        false
+    };
+    drop(guard);
+
+    let ping = if running && !state.ping_target.is_empty() {
+        let addr = state.ping_target.clone();
+        let start = Instant::now();
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            TcpStream::connect(&addr),
+        )
+        .await
+        {
+            Ok(Ok(_)) => start.elapsed().as_millis() as u64,
+            _ => 0,
         }
     } else {
         0
@@ -72,19 +124,12 @@ async fn get_status(state: State<'_, AppState>) -> Result<serde_json::Value, Str
     }))
 }
 
-// ── App Entry ───────────────────────────────────────────
+// ── Entry ──────────────────────────────────────────────
 
 fn main() {
-    // Install panic logger for debug
-    std::panic::set_hook(Box::new(|info| {
-        let msg = format!("PANIC: {info}");
-        let _ = std::fs::write("dakal_crash.log", &msg);
-        eprintln!("{msg}");
-    }));
-
     let state = AppState {
-        proc: Arc::new(Mutex::new(SingBoxProcess::new())),
-        config: Arc::new(Mutex::new(AppConfig::load())),
+        child: Arc::new(Mutex::new(None)),
+        ping_target: extract_ping_target(),
     };
 
     tauri::Builder::default()
@@ -93,18 +138,21 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         .manage(state)
         .invoke_handler(tauri::generate_handler![
-            start_vpn,
-            stop_vpn,
+            connect,
+            disconnect,
             get_status,
         ])
-        .setup(move |_app| {
-            // Create tray
+        .setup(|_app| {
+            // Tray icon
             use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
             use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
             let show = MenuItem::with_id(_app, "show", "Show", true, None::<&str>)?;
             let quit = MenuItem::with_id(_app, "quit", "Quit", true, None::<&str>)?;
-            let tray_menu = Menu::with_items(_app, &[&show, &PredefinedMenuItem::separator(_app)?, &quit])?;
+            let tray_menu = Menu::with_items(
+                _app,
+                &[&show, &PredefinedMenuItem::separator(_app)?, &quit],
+            )?;
 
             let _tray = TrayIconBuilder::new()
                 .menu(&tray_menu)
