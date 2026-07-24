@@ -79,9 +79,16 @@ impl AppConfig {
                         "type": "https",
                         "server": "8.8.8.8",
                         "detour": "ss-out"
+                    },
+                    {
+                        "tag": "local-dns",
+                        "type": "udp",
+                        "server": "192.168.1.1",
+                        "detour": "direct"
                     }
                 ],
-                "final": "remote-doh"
+                "final": "remote-doh",
+                "strategy": "ipv4_only"
             },
             "inbounds": [
                 {
@@ -90,6 +97,7 @@ impl AppConfig {
                     "address": ["172.19.0.1/30"],
                     "auto_route": true,
                     "strict_route": true,
+                    "sniff": true,
                     "stack": "system"
                 }
             ],
@@ -124,16 +132,17 @@ impl AppConfig {
             ],
             "route": {
                 "rules": [
-                    { "action": "sniff" },
-                    { "protocol": "dns", "action": "hijack-dns" },
+                    {
+                        "protocol": "dns",
+                        "outbound": "direct"
+                    },
                     {
                         "ip_cidr": ["187.127.83.147/32"],
                         "outbound": "direct"
                     }
                 ],
                 "final": "ss-out",
-                "auto_detect_interface": true,
-                "default_domain_resolver": "remote-doh"
+                "auto_detect_interface": true
             }
         }))
         .unwrap_or_default()
