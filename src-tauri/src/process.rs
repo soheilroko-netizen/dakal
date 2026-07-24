@@ -14,10 +14,7 @@ impl SingBoxProcess {
     pub fn is_running(&mut self) -> bool {
         if let Some(ref mut child) = self.child {
             match child.try_wait() {
-                Ok(Some(_)) => {
-                    // Exited, clean up
-                    false
-                }
+                Ok(Some(_)) => false,
                 Ok(None) => true,
                 Err(_) => false,
             }
@@ -26,28 +23,16 @@ impl SingBoxProcess {
         }
     }
 
-    pub async fn start(&mut self, cfg: &super::config::AppConfig, _app: &tauri::AppHandle) -> anyhow::Result<()> {
-        // Write config to temp
-        let temp_dir = std::env::temp_dir().join("dakal");
-        std::fs::create_dir_all(&temp_dir)?;
-        let config_path = temp_dir.join("config.json");
+    pub async fn start(&mut self, cfg: &super::config::AppConfig) -> anyhow::Result<()> {
+        if !cfg.config_exists() {
+            return Err(anyhow::anyhow!("config.json not found next to dakal.exe. Place your sing-box config in the same folder."));
+        }
 
-        // Load user config or use embedded default
-        let config_content = match &cfg.config_path {
-            Some(path) if std::path::Path::new(path).exists() => {
-                std::fs::read_to_string(path)?
-            }
-            _ => cfg.generate_config(),
-        };
-        std::fs::write(&config_path, &config_content)?;
-
-        // Locate sing-box.exe (same dir as app)
         let exe_dir = std::env::current_exe()?
             .parent()
             .expect("exe parent")
             .to_path_buf();
         let singbox = exe_dir.join("sing-box.exe");
-
         if !singbox.exists() {
             return Err(anyhow::anyhow!("sing-box.exe not found next to app. Place it in the same folder."));
         }
@@ -55,7 +40,7 @@ impl SingBoxProcess {
         let child = Command::new(&singbox)
             .arg("run")
             .arg("-c")
-            .arg(&config_path)
+            .arg(cfg.config_path())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .creation_flags(0x08000000) // CREATE_NO_WINDOW

@@ -73,6 +73,7 @@ jobs:
           mkdir $dest -Force
           Copy-Item $src "$dest/dakal.exe"
           Copy-Item "sing-box.exe" "$dest/" -ErrorAction SilentlyContinue
+          Copy-Item "config.json" "$dest/" -ErrorAction SilentlyContinue
           Compress-Archive -Path "$dest/*" -DestinationPath "dakal-v0.1.0.zip"
 
       - uses: actions/upload-artifact@v4

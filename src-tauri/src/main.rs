@@ -1,7 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod config;
-mod ping;
 mod process;
 
 use std::sync::Arc;
@@ -26,7 +25,7 @@ async fn start_vpn(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<
     }
 
     let cfg = state.config.lock().await.clone();
-    proc.start(&cfg, &app).await.map_err(|e| e.to_string())?;
+    proc.start(&cfg).await.map_err(|e| e.to_string())?;
 
     // Emit connected status
     let _ = app.emit("vpn-status", serde_json::json!({"running": true}));
@@ -45,22 +44,23 @@ async fn stop_vpn(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(
 async fn get_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let mut proc = state.proc.lock().await;
     let running = proc.is_running();
+    let cfg = state.config.lock().await.clone();
+    let ping_target = cfg.ping_target.clone();
+    drop(cfg);
     let ping = if running {
-        let now = std::time::Instant::now();
-        // Quick TCP check to server
-        match state.config.lock().await.get_ping_target() {
-            Some(addr) => {
-                let r = tokio::time::timeout(
-                    std::time::Duration::from_secs(3),
-                    tokio::net::TcpStream::connect(&addr),
-                )
-                .await;
-                match r {
-                    Ok(Ok(_)) => now.elapsed().as_millis() as u64,
-                    _ => 0,
-                }
+        if let Some(addr) = ping_target {
+            let now = std::time::Instant::now();
+            let r = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                tokio::net::TcpStream::connect(&addr),
+            )
+            .await;
+            match r {
+                Ok(Ok(_)) => now.elapsed().as_millis() as u64,
+                _ => 0,
             }
-            None => 0,
+        } else {
+            0
         }
     } else {
         0
@@ -84,18 +84,13 @@ fn main() {
 
     let state = AppState {
         proc: Arc::new(Mutex::new(SingBoxProcess::new())),
-        config: Arc::new(Mutex::new(AppConfig::load_or_default())),
+        config: Arc::new(Mutex::new(AppConfig::load())),
     };
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_store::Builder::default().build())
-        .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_os::init())
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             start_vpn,
