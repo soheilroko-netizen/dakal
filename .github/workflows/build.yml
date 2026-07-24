@@ -27,8 +27,6 @@ jobs:
         with:
           node-version: '22'
 
-      - run: echo "Enabling build scripts for dependencies" && pnpm config set enable-scripts true
-
       - run: pnpm install
 
       - name: Build
