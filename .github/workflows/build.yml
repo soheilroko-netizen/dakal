@@ -45,11 +45,20 @@ jobs:
 
       - name: Download sing-box
         run: |
+          echo "Downloading sing-box..."
           curl.exe -Lo sing-box.zip "https://github.com/SagerNet/sing-box/releases/download/v1.13.14/sing-box-1.13.14-windows-amd64v3.zip"
-          7z x sing-box.zip -osing-box-tmp
-          Move-Item "sing-box-tmp\sing-box-*\sing-box.exe" "sing-box.exe" -Force
+          echo "Downloaded. Size:"
+          ls -la sing-box.zip
+          echo "Extracting..."
+          7z x sing-box.zip "-osing-box-tmp" -y
+          echo "Extracted files:"
+          Get-ChildItem -Recurse sing-box-tmp
+          echo "Moving exe..."
+          $exe = Get-ChildItem -Recurse sing-box-tmp -Filter "sing-box.exe" | Select-Object -First 1
+          if ($exe) { Move-Item $exe.FullName "sing-box.exe" -Force } else { throw "sing-box.exe not found in archive" }
           Remove-Item sing-box.zip -Force
           Remove-Item sing-box-tmp -Recurse -Force
+          echo "Done: sing-box.exe ready"
 
       - uses: tauri-apps/tauri-action@v0
         env:
